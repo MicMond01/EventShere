@@ -1,35 +1,32 @@
 import { createClient, RedisClientType } from 'redis';
+import { env } from './env';
 
 let client: RedisClientType;
 
 export function getRedis(): RedisClientType {
-  if (!client) throw new Error('Redis not connected');
+  if (!client) throw new Error('Redis not initialised — call connectRedis() first');
   return client;
 }
 
 export async function connectRedis(): Promise<void> {
   client = createClient({
-    socket: {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: Number(process.env.REDIS_PORT) || 6379,
-    },
+    socket: { host: env.REDIS.HOST, port: env.REDIS.PORT },
   }) as RedisClientType;
 
-  client.on('error', (err) => console.error('Redis error:', err));
+  client.on('error', (err) => console.error('[Redis]', err));
   await client.connect();
-  console.log('✅ Redis connected');
+  console.log('✅  Redis connected');
 }
 
-// Convenience helpers
-export async function setCache(key: string, value: unknown, ttlSeconds = 3600) {
+export async function setCache(key: string, value: unknown, ttlSeconds = 3600): Promise<void> {
   await getRedis().setEx(key, ttlSeconds, JSON.stringify(value));
 }
 
 export async function getCache<T>(key: string): Promise<T | null> {
-  const data = await getRedis().get(key);
-  return data ? (JSON.parse(data) as T) : null;
+  const raw = await getRedis().get(key);
+  return raw ? (JSON.parse(raw) as T) : null;
 }
 
-export async function deleteCache(key: string) {
+export async function deleteCache(key: string): Promise<void> {
   await getRedis().del(key);
 }

@@ -1,6 +1,7 @@
 import sgMail from '@sendgrid/mail';
+import { env } from '../config/env';
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY || '');
+sgMail.setApiKey(env.SENDGRID_API_KEY);
 
 interface EmailOptions {
   to: string;
@@ -10,91 +11,51 @@ interface EmailOptions {
 }
 
 export async function sendEmail(opts: EmailOptions): Promise<void> {
-  if (process.env.NODE_ENV === 'development' && !process.env.SENDGRID_API_KEY) {
-    console.log(`\n📧 [DEV EMAIL] To: ${opts.to}\nSubject: ${opts.subject}\n${opts.text || ''}\n`);
+  if (env.NODE_ENV === 'development' && !env.SENDGRID_API_KEY) {
+    console.log(`\n📧 [DEV EMAIL]\nTo: ${opts.to}\nSubject: ${opts.subject}\n`);
     return;
   }
-  await sgMail.send({
-    to: opts.to,
-    from: process.env.EMAIL_FROM || 'noreply@eventshere.com',
-    subject: opts.subject,
-    html: opts.html,
-    text: opts.text,
-  });
+  await sgMail.send({ from: env.EMAIL_FROM, ...opts });
 }
 
-// ── Email templates ────────────────────────────────────────
-
-export function welcomeEmail(displayName: string): Pick<EmailOptions, 'subject' | 'html' | 'text'> {
+export function invitationTemplate(p: {
+  guestName: string; eventName: string; eventDate: string;
+  venueName: string; rsvpUrl: string; rsvpDeadline: string;
+}) {
   return {
-    subject: 'Welcome to EventShere 🎉',
-    html: `<h2>Welcome, ${displayName}!</h2><p>Your EventShere account is ready. Start planning or discovering events today.</p>`,
-    text: `Welcome, ${displayName}! Your EventShere account is ready.`,
+    subject: `You're invited to ${p.eventName}`,
+    html: `<h2>Hello ${p.guestName},</h2>
+           <p>You are invited to <strong>${p.eventName}</strong> on <strong>${p.eventDate}</strong> at <strong>${p.venueName}</strong>.</p>
+           <p>Please RSVP before <strong>${p.rsvpDeadline}</strong>.</p>
+           <a href="${p.rsvpUrl}" style="background:#6366f1;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;">RSVP Now</a>`,
+    text: `You're invited to ${p.eventName} on ${p.eventDate} at ${p.venueName}. RSVP: ${p.rsvpUrl}`,
   };
 }
 
-export function invitationEmail(opts: {
-  guestName: string;
-  eventName: string;
-  eventDate: string;
-  venueName: string;
-  rsvpUrl: string;
-  rsvpDeadline: string;
-}): Pick<EmailOptions, 'subject' | 'html' | 'text'> {
+export function seatAssignmentTemplate(p: {
+  guestName: string; eventName: string; eventDate: string;
+  seatLabel: string; zoneName: string; seatFinderUrl: string; qrCodeDataUrl: string;
+}) {
   return {
-    subject: `You're invited to ${opts.eventName}`,
-    html: `
-      <h2>Hello ${opts.guestName},</h2>
-      <p>You have been invited to <strong>${opts.eventName}</strong>.</p>
-      <p><strong>Date:</strong> ${opts.eventDate}</p>
-      <p><strong>Venue:</strong> ${opts.venueName}</p>
-      <p>Please RSVP before <strong>${opts.rsvpDeadline}</strong>.</p>
-      <a href="${opts.rsvpUrl}" style="background:#6366f1;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;">RSVP Now</a>
-    `,
-    text: `You're invited to ${opts.eventName} on ${opts.eventDate} at ${opts.venueName}. RSVP at: ${opts.rsvpUrl}`,
+    subject: `Your seat for ${p.eventName} — ${p.seatLabel}`,
+    html: `<h2>Hello ${p.guestName},</h2>
+           <p>Your seat for <strong>${p.eventName}</strong> is <strong>${p.seatLabel}</strong> in ${p.zoneName}.</p>
+           <p><a href="${p.seatFinderUrl}">View your seat on the 3D map →</a></p>
+           <p>Show this QR code at check-in:</p>
+           <img src="${p.qrCodeDataUrl}" width="200" alt="Check-in QR" />`,
+    text: `Your seat for ${p.eventName}: ${p.seatLabel} (${p.zoneName}). Map: ${p.seatFinderUrl}`,
   };
 }
 
-export function seatAssignmentEmail(opts: {
-  guestName: string;
-  eventName: string;
-  eventDate: string;
-  seatLabel: string;
-  zoneName: string;
-  seatFinderUrl: string;
-  qrCodeDataUrl: string;
-}): Pick<EmailOptions, 'subject' | 'html' | 'text'> {
+export function bookingConfirmationTemplate(p: {
+  plannerName: string; venueName: string; eventDate: string;
+  totalAmount: string; currency: string;
+}) {
   return {
-    subject: `Your seat for ${opts.eventName} — ${opts.seatLabel}`,
-    html: `
-      <h2>Hello ${opts.guestName},</h2>
-      <p>Your seat for <strong>${opts.eventName}</strong> has been assigned.</p>
-      <p><strong>Seat:</strong> ${opts.seatLabel} (${opts.zoneName})</p>
-      <p><strong>Date:</strong> ${opts.eventDate}</p>
-      <p>Use the link below to view your seat on the interactive 3D map:</p>
-      <a href="${opts.seatFinderUrl}">View My Seat →</a>
-      <p>Present the QR code below at the entrance for check-in:</p>
-      <img src="${opts.qrCodeDataUrl}" alt="Your check-in QR code" width="200" />
-    `,
-    text: `Your seat for ${opts.eventName}: ${opts.seatLabel} (${opts.zoneName}). View: ${opts.seatFinderUrl}`,
-  };
-}
-
-export function bookingConfirmationEmail(opts: {
-  plannerName: string;
-  venueName: string;
-  eventDate: string;
-  totalAmount: string;
-  currency: string;
-}): Pick<EmailOptions, 'subject' | 'html' | 'text'> {
-  return {
-    subject: `Booking Confirmed — ${opts.venueName}`,
-    html: `
-      <h2>Booking Confirmed!</h2>
-      <p>Hello ${opts.plannerName}, your booking for <strong>${opts.venueName}</strong> has been confirmed.</p>
-      <p><strong>Event Date:</strong> ${opts.eventDate}</p>
-      <p><strong>Amount Paid:</strong> ${opts.currency} ${opts.totalAmount}</p>
-    `,
-    text: `Booking confirmed for ${opts.venueName} on ${opts.eventDate}. Amount: ${opts.currency} ${opts.totalAmount}`,
+    subject: `Booking Confirmed — ${p.venueName}`,
+    html: `<h2>Booking Confirmed!</h2>
+           <p>Hello ${p.plannerName}, your booking for <strong>${p.venueName}</strong> on <strong>${p.eventDate}</strong> is confirmed.</p>
+           <p>Amount paid: <strong>${p.currency} ${p.totalAmount}</strong></p>`,
+    text: `Booking confirmed for ${p.venueName} on ${p.eventDate}. Amount: ${p.currency} ${p.totalAmount}`,
   };
 }

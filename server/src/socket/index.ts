@@ -1,15 +1,16 @@
-import { Server } from 'socket.io';
+import { Server as SocketServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { JwtPayload } from '../middleware/auth.middleware';
+import { env } from '../config/env';
 
-export function initSocket(io: Server) {
-  // Authenticate socket connections
+export function initSocket(io: SocketServer): void {
+  // Auth handshake — every connection must send a valid JWT
   io.use((socket, next) => {
-    const token = socket.handshake.auth?.token;
+    const token = socket.handshake.auth?.token as string | undefined;
     if (!token) return next(new Error('No token'));
     try {
-      const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET!) as JwtPayload;
-      socket.data.user = payload;
+      const payload = jwt.verify(token, env.JWT.ACCESS_SECRET) as { userId: string; role: string };
+      socket.data.userId = payload.userId;
+      socket.data.role   = payload.role;
       next();
     } catch {
       next(new Error('Invalid token'));
@@ -17,10 +18,9 @@ export function initSocket(io: Server) {
   });
 
   io.on('connection', (socket) => {
-    const user = socket.data.user as JwtPayload;
-    console.log(`Socket connected: ${user.userId} (${user.role})`);
+    console.log(`[Socket] connected: ${socket.data.userId}`);
 
-    // Join a room for each event the user is part of
+    // Planner joins event room to get live updates
     socket.on('join:event', (eventId: string) => {
       socket.join(`event:${eventId}`);
     });
@@ -29,32 +29,27 @@ export function initSocket(io: Server) {
       socket.leave(`event:${eventId}`);
     });
 
-    // ── Check-in events ──
+    // Check-in scanner emits this — server broadcasts to all planners watching the event
     socket.on('checkin:scan', (data: { eventId: string; guestId: string }) => {
-      // Emit to all planners watching this event
-      io.to(`event:${data.eventId}`).emit('checkin:update', {
-        guestId: data.guestId,
-        timestamp: new Date(),
-      });
+      io.to(`event:${data.eventId}`).emit('checkin:update', data);
     });
 
-    // ── Layout collaboration ──
+    // 3D layout collaborative editing
     socket.on('layout:update', (data: { eventId: string; change: unknown }) => {
-      // Broadcast layout change to all co-planners except sender
       socket.to(`event:${data.eventId}`).emit('layout:change', data.change);
     });
 
-    // ── Real-time announcements ──
+    // Planner sends announcement to all guests in the event room
     socket.on('event:announce', (data: { eventId: string; message: string }) => {
       io.to(`event:${data.eventId}`).emit('event:announcement', {
         message: data.message,
-        sentAt: new Date(),
-        sentBy: user.userId,
+        from: socket.data.userId,
+        at: new Date().toISOString(),
       });
     });
 
     socket.on('disconnect', () => {
-      console.log(`Socket disconnected: ${user.userId}`);
+      console.log(`[Socket] disconnected: ${socket.data.userId}`);
     });
   });
 }
