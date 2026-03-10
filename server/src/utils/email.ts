@@ -1,5 +1,5 @@
-import sgMail from '@sendgrid/mail';
-import { env } from '../config/env';
+import sgMail from "@sendgrid/mail";
+import { env } from "../config/env";
 
 sgMail.setApiKey(env.SENDGRID_API_KEY);
 
@@ -11,7 +11,7 @@ interface EmailOptions {
 }
 
 export async function sendEmail(opts: EmailOptions): Promise<void> {
-  if (env.NODE_ENV === 'development' && !env.SENDGRID_API_KEY) {
+  if (env.NODE_ENV === "development" && !env.SENDGRID_API_KEY) {
     console.log(`\n📧 [DEV EMAIL]\nTo: ${opts.to}\nSubject: ${opts.subject}\n`);
     return;
   }
@@ -19,8 +19,12 @@ export async function sendEmail(opts: EmailOptions): Promise<void> {
 }
 
 export function invitationTemplate(p: {
-  guestName: string; eventName: string; eventDate: string;
-  venueName: string; rsvpUrl: string; rsvpDeadline: string;
+  guestName: string;
+  eventName: string;
+  eventDate: string;
+  venueName: string;
+  rsvpUrl: string;
+  rsvpDeadline: string;
 }) {
   return {
     subject: `You're invited to ${p.eventName}`,
@@ -33,8 +37,13 @@ export function invitationTemplate(p: {
 }
 
 export function seatAssignmentTemplate(p: {
-  guestName: string; eventName: string; eventDate: string;
-  seatLabel: string; zoneName: string; seatFinderUrl: string; qrCodeDataUrl: string;
+  guestName: string;
+  eventName: string;
+  eventDate: string;
+  seatLabel: string;
+  zoneName: string;
+  seatFinderUrl: string;
+  qrCodeDataUrl: string;
 }) {
   return {
     subject: `Your seat for ${p.eventName} — ${p.seatLabel}`,
@@ -48,8 +57,11 @@ export function seatAssignmentTemplate(p: {
 }
 
 export function bookingConfirmationTemplate(p: {
-  plannerName: string; venueName: string; eventDate: string;
-  totalAmount: string; currency: string;
+  plannerName: string;
+  venueName: string;
+  eventDate: string;
+  totalAmount: string;
+  currency: string;
 }) {
   return {
     subject: `Booking Confirmed — ${p.venueName}`,
@@ -57,5 +69,16 @@ export function bookingConfirmationTemplate(p: {
            <p>Hello ${p.plannerName}, your booking for <strong>${p.venueName}</strong> on <strong>${p.eventDate}</strong> is confirmed.</p>
            <p>Amount paid: <strong>${p.currency} ${p.totalAmount}</strong></p>`,
     text: `Booking confirmed for ${p.venueName} on ${p.eventDate}. Amount: ${p.currency} ${p.totalAmount}`,
+  };
+}
+
+export function passwordResetTemplate(p: { resetUrl: string }) {
+  return {
+    subject: "Reset your EventShere password",
+    html: `<h2>Password Reset Request</h2>
+           <p>We received a request to reset your password. Click the link below to set a new one:</p>
+           <p><a href="${p.resetUrl}" style="background:#ef4444;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;">Reset Password</a></p>
+           <p>If you didn't request this, you can safely ignore this email.</p>`,
+    text: `Reset your EventShere password by visiting this link: ${p.resetUrl}`,
   };
 }

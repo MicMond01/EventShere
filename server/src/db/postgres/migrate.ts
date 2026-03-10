@@ -1,19 +1,21 @@
-import 'dotenv/config';
-import { connectPostgres, getPool } from './client';
+import "dotenv/config";
+import { connectPostgres, getPool } from "./client";
 
-const SQL = `
+const BASE_SQL = `
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ── USERS ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
-  id         UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-  email      VARCHAR(255) UNIQUE NOT NULL,
-  password   VARCHAR(255) NOT NULL,
-  role       VARCHAR(30)  NOT NULL CHECK (role IN ('venue_owner','planner','guest','vendor','admin')),
-  status     VARCHAR(30)  NOT NULL DEFAULT 'active'
-             CHECK (status IN ('active','suspended','banned','pending_verification')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                    UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  email                 VARCHAR(255) UNIQUE NOT NULL,
+  password              VARCHAR(255) NOT NULL,
+  role                  VARCHAR(30)  NOT NULL CHECK (role IN ('venue_owner','planner','guest','vendor','admin')),
+  status                VARCHAR(30)  NOT NULL DEFAULT 'active'
+                        CHECK (status IN ('active','suspended','banned','pending_verification')),
+  failed_login_attempts INTEGER      NOT NULL DEFAULT 0,
+  locked_until          TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS user_profiles (
@@ -23,6 +25,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   photo_url    TEXT,
   bio          TEXT,
   phone        VARCHAR(20),
+  country_code VARCHAR(2),
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -44,6 +47,15 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id    UUID REFERENCES users(id) ON DELETE CASCADE,
+  token      VARCHAR(255) UNIQUE NOT NULL,
+  used       BOOLEAN      NOT NULL DEFAULT FALSE,
+  expires_at TIMESTAMPTZ  NOT NULL,
+  created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
 -- ── VENUES ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS venues (
   id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -56,6 +68,7 @@ CREATE TABLE IF NOT EXISTS venues (
   city              VARCHAR(100) NOT NULL,
   state             VARCHAR(100) NOT NULL,
   country           VARCHAR(100) NOT NULL DEFAULT 'Nigeria',
+  country_code      VARCHAR(2)   NOT NULL DEFAULT 'NG',
   lat               DECIMAL(10,7),
   lng               DECIMAL(10,7),
   seated_capacity   INTEGER,
@@ -161,23 +174,23 @@ CREATE TABLE IF NOT EXISTS event_runsheet (
 
 -- ── GUESTS ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS guests (
-  id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  event_id         UUID REFERENCES events(id) ON DELETE CASCADE,
-  user_id          UUID REFERENCES users(id),
-  name             VARCHAR(200) NOT NULL,
-  email            VARCHAR(255),
-  phone            VARCHAR(20),
-  category         VARCHAR(20)  NOT NULL DEFAULT 'general'
-                   CHECK (category IN ('vip','dignitary','family','general','press','vendor_staff')),
-  rsvp_status      VARCHAR(15)  NOT NULL DEFAULT 'pending'
-                   CHECK (rsvp_status IN ('pending','confirmed','declined','tentative','waitlisted')),
-  checked_in       BOOLEAN      NOT NULL DEFAULT FALSE,
-  checked_in_at    TIMESTAMPTZ,
-  qr_code          TEXT,
-  notes            TEXT,
-  dietary_req      TEXT,
+  id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  event_id          UUID REFERENCES events(id) ON DELETE CASCADE,
+  user_id           UUID REFERENCES users(id),
+  name              VARCHAR(200) NOT NULL,
+  email             VARCHAR(255),
+  phone             VARCHAR(20),
+  category          VARCHAR(20)  NOT NULL DEFAULT 'general'
+                    CHECK (category IN ('vip','dignitary','family','general','press','vendor_staff')),
+  rsvp_status       VARCHAR(15)  NOT NULL DEFAULT 'pending'
+                    CHECK (rsvp_status IN ('pending','confirmed','declined','tentative','waitlisted')),
+  checked_in        BOOLEAN      NOT NULL DEFAULT FALSE,
+  checked_in_at     TIMESTAMPTZ,
+  qr_code           TEXT,
+  notes             TEXT,
+  dietary_req       TEXT,
   accessibility_req TEXT,
-  created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS seat_assignments (
@@ -202,12 +215,15 @@ CREATE TABLE IF NOT EXISTS bookings (
                        CHECK (status IN ('pending','accepted','declined','counter_offered','confirmed','cancelled','completed')),
   total_amount         DECIMAL(12,2) NOT NULL,
   platform_fee         DECIMAL(12,2) NOT NULL DEFAULT 0,
+  currency             VARCHAR(10)   NOT NULL DEFAULT 'NGN',
+  gateway              VARCHAR(20)   NOT NULL DEFAULT 'paystack'
+                       CHECK (gateway IN ('paystack','flutterwave','stripe')),
   payment_status       VARCHAR(10)   NOT NULL DEFAULT 'unpaid'
                        CHECK (payment_status IN ('unpaid','partial','paid','refunded')),
   event_date           DATE          NOT NULL,
   message              TEXT,
   special_requirements TEXT,
-  paystack_ref         VARCHAR(100),
+  payment_ref          VARCHAR(100),
   created_at           TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
   updated_at           TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
@@ -257,7 +273,6 @@ CREATE TABLE IF NOT EXISTS vendors (
                       CHECK (confirmation_status IN ('pending','confirmed','cancelled')),
   arrival_time        TIMESTAMPTZ,
   setup_notes         TEXT,
-  qr_code             TEXT,
   arrived_at          TIMESTAMPTZ,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -280,6 +295,8 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- ── INDEXES ───────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_venues_city          ON venues(city);
 CREATE INDEX IF NOT EXISTS idx_venues_status        ON venues(status);
+CREATE INDEX IF NOT EXISTS idx_venues_country_code  ON venues(country_code);
+CREATE INDEX IF NOT EXISTS idx_venues_currency      ON venues(currency);
 CREATE INDEX IF NOT EXISTS idx_events_planner       ON events(planner_id);
 CREATE INDEX IF NOT EXISTS idx_events_status        ON events(status);
 CREATE INDEX IF NOT EXISTS idx_events_start_time    ON events(start_time);
@@ -290,17 +307,52 @@ CREATE INDEX IF NOT EXISTS idx_bookings_planner      ON bookings(planner_id);
 CREATE INDEX IF NOT EXISTS idx_ratings_ratee         ON ratings(ratee_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user    ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user   ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_prt_token             ON password_reset_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_prt_user              ON password_reset_tokens(user_id);
+`;
+
+// ── Incremental ALTER statements (safe to re-run on existing DBs) ─────────
+const ALTER_SQL = `
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS locked_until          TIMESTAMPTZ;
+
+ALTER TABLE user_profiles
+  ADD COLUMN IF NOT EXISTS country_code VARCHAR(2);
+
+ALTER TABLE venues
+  ADD COLUMN IF NOT EXISTS country_code VARCHAR(2) NOT NULL DEFAULT 'NG';
+
+ALTER TABLE bookings
+  ADD COLUMN IF NOT EXISTS currency VARCHAR(10)  NOT NULL DEFAULT 'NGN',
+  ADD COLUMN IF NOT EXISTS gateway  VARCHAR(20)  NOT NULL DEFAULT 'paystack';
+
+ALTER TABLE bookings
+  RENAME COLUMN paystack_ref TO payment_ref;
 `;
 
 async function migrate() {
   await connectPostgres();
-  console.log('🔄  Running migrations...');
-  await getPool().query(SQL);
-  console.log('✅  Migrations complete');
+  console.log("🔄  Running migrations...");
+  await getPool().query(BASE_SQL);
+
+  // ALTER statements are safe to run on both fresh and existing DBs
+  try {
+    await getPool().query(ALTER_SQL);
+    console.log("✅  Incremental schema updates applied");
+  } catch (err) {
+    // Some ALTER errors are fine (already-renamed columns etc.)
+    const msg = (err as Error).message;
+    if (!msg.includes("already exists") && !msg.includes("does not exist")) {
+      console.warn("⚠️  ALTER warning (non-critical):", msg);
+    }
+  }
+
+  console.log("✅  Migrations complete");
   process.exit(0);
 }
 
 migrate().catch((err) => {
-  console.error('❌  Migration failed:', err.message);
+  console.error("❌  Migration failed:", err);
   process.exit(1);
 });
