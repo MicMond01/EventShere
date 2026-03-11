@@ -15,7 +15,7 @@ export async function connectRedis(): Promise<void> {
 
   client.on('error', (err) => console.error('[Redis]', err));
   await client.connect();
-  console.log('✅  Redis connected');
+  console.log('Redis connected');
 }
 
 export async function setCache(key: string, value: unknown, ttlSeconds = 3600): Promise<void> {

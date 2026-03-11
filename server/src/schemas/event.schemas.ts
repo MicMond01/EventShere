@@ -6,7 +6,7 @@ export const createEventSchema = z.object({
   description:   z.string().optional(),
   startTime:     z.string().datetime(),
   endTime:       z.string().datetime(),
-  visibility:    z.enum(['public','private','unlisted']).default('private'),
+  visibility:    z.enum(['public','private','unlisted']).default('public'),
   maxGuests:     z.number().int().positive().default(100),
   rsvpDeadline:  z.string().datetime().optional(),
   coverImageUrl: z.string().url().optional(),

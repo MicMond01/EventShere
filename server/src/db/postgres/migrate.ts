@@ -333,26 +333,26 @@ ALTER TABLE bookings
 
 async function migrate() {
   await connectPostgres();
-  console.log("🔄  Running migrations...");
+  console.log("Running migrations...");
   await getPool().query(BASE_SQL);
 
   // ALTER statements are safe to run on both fresh and existing DBs
   try {
     await getPool().query(ALTER_SQL);
-    console.log("✅  Incremental schema updates applied");
+    console.log("Incremental schema updates applied");
   } catch (err) {
     // Some ALTER errors are fine (already-renamed columns etc.)
     const msg = (err as Error).message;
     if (!msg.includes("already exists") && !msg.includes("does not exist")) {
-      console.warn("⚠️  ALTER warning (non-critical):", msg);
+      console.warn("ALTER warning (non-critical):", msg);
     }
   }
 
-  console.log("✅  Migrations complete");
+  console.log("Migrations complete");
   process.exit(0);
 }
 
 migrate().catch((err) => {
-  console.error("❌  Migration failed:", err);
+  console.error("Migration failed:", err);
   process.exit(1);
 });

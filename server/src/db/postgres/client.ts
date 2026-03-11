@@ -22,7 +22,7 @@ export async function connectPostgres(): Promise<void> {
 
   const client = await pool.connect();
   client.release();
-  console.log('✅  PostgreSQL connected');
+  console.log('PostgreSQL connected');
 }
 
 /** Run a query and return all rows */

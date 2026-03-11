@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { connectPostgres, getPool, query } from "../../db/postgres/client";
+import { connectPostgres, query } from "../../db/postgres/client";
 
 async function main() {
   await connectPostgres();
