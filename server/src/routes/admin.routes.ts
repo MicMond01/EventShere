@@ -13,5 +13,11 @@ router.get   ('/venues/pending',     adminController.getPendingVenues);
 router.patch ('/venues/:id/review',  adminController.reviewVenue);
 router.get   ('/ratings/flagged',    adminController.getFlaggedRatings);
 router.delete('/ratings/:id',        adminController.deleteRating);
+router.get   ('/events',             adminController.getEvents);
+router.patch ('/events/:id/status',  adminController.updateEventStatus);
+router.delete('/events/:id',         adminController.deleteEvent);
+router.get   ('/bookings',           adminController.getBookings);
+router.patch ('/bookings/:id/status',adminController.updateBookingStatus);
+router.delete('/bookings/:id',       adminController.deleteBooking);
 
 export default router;

@@ -36,3 +36,34 @@ export async function deleteRating(req: Request, res: Response): Promise<void> {
   await adminService.deleteRating(req.params.id);
   res.json({ success: true });
 }
+
+export async function getEvents(req: Request, res: Response): Promise<void> {
+  const data = await adminService.getEvents(req.query as Record<string, string>);
+  res.json({ success: true, data });
+}
+
+export async function updateEventStatus(req: Request, res: Response): Promise<void> {
+  await adminService.updateEventStatus(req.params.id, req.body.status);
+  res.json({ success: true });
+}
+
+export async function deleteEvent(req: Request, res: Response): Promise<void> {
+  await adminService.deleteEvent(req.params.id);
+  res.json({ success: true });
+}
+
+export async function getBookings(req: Request, res: Response): Promise<void> {
+  const data = await adminService.getBookings(req.query as Record<string, string>);
+  res.json({ success: true, data });
+}
+
+export async function updateBookingStatus(req: Request, res: Response): Promise<void> {
+  await adminService.updateBookingStatus(req.params.id, req.body.status);
+  res.json({ success: true });
+}
+
+export async function deleteBooking(req: Request, res: Response): Promise<void> {
+  await adminService.deleteBooking(req.params.id);
+  res.json({ success: true });
+}
+
