@@ -67,3 +67,7 @@ export async function deleteBooking(req: Request, res: Response): Promise<void> 
   res.json({ success: true });
 }
 
+export async function getAllGuests(req: Request, res: Response): Promise<void> {
+  const data = await adminService.getAllGuests(req.query as Record<string, string>);
+  res.json({ success: true, data });
+}

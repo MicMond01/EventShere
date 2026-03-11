@@ -132,5 +132,64 @@ export async function deleteBooking(bookingId: string) {
   await query(`DELETE FROM bookings WHERE id=$1`, [bookingId]);
 }
 
+export async function getAllGuests(params: Record<string, string>) {
+  const { limit, offset } = paginate(Number(params.page), Number(params.limit));
+  const conditions: string[] = [];
+  const values: unknown[] = [];
+  let i = 1;
 
+  if (params.email) {
+    conditions.push(`LOWER(g.email) LIKE $${i++}`);
+    values.push(`%${params.email.toLowerCase()}%`);
+  }
+  if (params.eventId) {
+    conditions.push(`g.event_id = $${i++}`);
+    values.push(params.eventId);
+  }
+  if (params.rsvpStatus) {
+    conditions.push(`g.rsvp_status = $${i++}`);
+    values.push(params.rsvpStatus);
+  }
 
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const [{ count }] = await query<any>(
+    `SELECT COUNT(*) FROM guests g ${where}`,
+    values,
+  );
+
+  const rows = await query(
+    `SELECT
+       g.id,
+       g.name,
+       g.email,
+       g.phone,
+       g.category,
+       g.rsvp_status,
+       g.checked_in,
+       g.checked_in_at,
+       g.dietary_req,
+       g.accessibility_req,
+       g.created_at,
+       e.id         AS event_id,
+       e.name       AS event_name,
+       e.start_time AS event_start,
+       e.end_time   AS event_end,
+       e.type       AS event_type,
+       e.status     AS event_status,
+       u.id         AS user_id,
+       u.email      AS user_email,
+       p.display_name,
+       p.photo_url
+     FROM guests g
+     JOIN events e           ON e.id = g.event_id
+     LEFT JOIN users u       ON u.id = g.user_id
+     LEFT JOIN user_profiles p ON p.user_id = g.user_id
+     ${where}
+     ORDER BY g.email ASC, e.start_time DESC
+     LIMIT $${i++} OFFSET $${i++}`,
+    [...values, limit, offset],
+  );
+
+  return { data: rows, total: Number(count), page: Number(params.page) || 1, limit };
+}

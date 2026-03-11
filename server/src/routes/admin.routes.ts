@@ -20,4 +20,7 @@ router.get   ('/bookings',           adminController.getBookings);
 router.patch ('/bookings/:id/status',adminController.updateBookingStatus);
 router.delete('/bookings/:id',       adminController.deleteBooking);
 
+// Guest records across all events
+router.get   ('/guests',             adminController.getAllGuests);
+
 export default router;

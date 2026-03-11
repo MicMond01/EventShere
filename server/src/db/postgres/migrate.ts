@@ -329,6 +329,13 @@ ALTER TABLE bookings
 
 ALTER TABLE bookings
   RENAME COLUMN paystack_ref TO payment_ref;
+
+-- Guest invitation-registration support
+ALTER TABLE guests
+  ADD COLUMN IF NOT EXISTS invitation_token VARCHAR(255);
+
+CREATE INDEX IF NOT EXISTS idx_guests_user  ON guests(user_id);
+CREATE INDEX IF NOT EXISTS idx_guests_email ON guests(email);
 `;
 
 async function migrate() {

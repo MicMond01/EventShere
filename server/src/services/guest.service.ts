@@ -25,10 +25,20 @@ export async function addGuest(eventId: string, requesterId: string, dto: AddGue
   const rsvpStatus = Number(count) >= (event?.max_guests ?? 0) ? 'waitlisted' : 'pending';
   const qrData = `eventshere:checkin:${generateToken(16)}`;
   const qrCode = await generateQRCode(qrData);
+
+  // Auto-link an existing user account if the email is already registered
+  let linkedUserId: string | null = null;
+  if (dto.email) {
+    const existingUser = await queryOne<{ id: string }>(
+      `SELECT id FROM users WHERE email = $1`, [dto.email.toLowerCase()]
+    );
+    if (existingUser) linkedUserId = existingUser.id;
+  }
+
   const [guest] = await query(
-    `INSERT INTO guests (event_id,name,email,phone,category,rsvp_status,notes,dietary_req,accessibility_req,qr_code)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-    [eventId,dto.name,dto.email,dto.phone,dto.category,rsvpStatus,dto.notes,dto.dietaryReq,dto.accessibilityReq,qrCode]
+    `INSERT INTO guests (event_id,name,email,phone,category,rsvp_status,notes,dietary_req,accessibility_req,qr_code,user_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [eventId,dto.name,dto.email,dto.phone,dto.category,rsvpStatus,dto.notes,dto.dietaryReq,dto.accessibilityReq,qrCode,linkedUserId]
   );
   return guest;
 }

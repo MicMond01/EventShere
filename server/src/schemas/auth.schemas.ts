@@ -1,10 +1,11 @@
 import { z } from 'zod';
 
 export const registerSchema = z.object({
-  email:       z.string().email(),
-  password:    z.string().min(8, 'Password must be at least 8 characters'),
-  displayName: z.string().min(2).max(100),
-  role:        z.enum(['venue_owner', 'planner', 'guest', 'vendor']),
+  email:           z.string().email().toLowerCase().trim(),
+  password:        z.string().min(8, 'Password must be at least 8 characters'),
+  displayName:     z.string().min(2).max(100),
+  role:            z.enum(['venue_owner', 'planner', 'guest', 'vendor']),
+  invitationToken: z.string().optional(),
 });
 
 export const loginSchema = z.object({

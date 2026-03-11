@@ -47,7 +47,9 @@ async function saveRefreshToken(userId: string, token: string): Promise<void> {
 
 // ── Public service functions ───────────────────────────────
 
-export async function register(dto: RegisterDto): Promise<TokenPair> {
+export async function register(
+  dto: RegisterDto & { invitationToken?: string },
+): Promise<TokenPair> {
   const existing = await queryOne(`SELECT id FROM users WHERE email = $1`, [
     dto.email,
   ]);
@@ -71,6 +73,35 @@ export async function register(dto: RegisterDto): Promise<TokenPair> {
       `INSERT INTO social_scores (user_id, current_score, tier) VALUES ($1, $2, 'standard')`,
       [newUser.id, DEFAULT_SOCIAL_SCORE],
     );
+
+    // ── Invitation-link registration: link user to their guest record ──────
+    if (dto.invitationToken) {
+      const {
+        rows: [inv],
+      } = await client.query(
+        `SELECT id, guest_id FROM invitations WHERE token = $1`,
+        [dto.invitationToken],
+      );
+      if (inv) {
+        // Link the new user account to the guest row
+        await client.query(
+          `UPDATE guests
+              SET user_id          = $1,
+                  invitation_token = $2
+            WHERE id = $3`,
+          [newUser.id, dto.invitationToken, inv.guest_id],
+        );
+        // Mark the invitation as viewed (guest will RSVP separately)
+        await client.query(
+          `UPDATE invitations
+              SET status    = 'viewed',
+                  viewed_at = NOW()
+            WHERE id = $1`,
+          [inv.id],
+        );
+      }
+    }
+
     return newUser;
   });
 
